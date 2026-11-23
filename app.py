@@ -83,6 +83,11 @@ PORTADA = """<!doctype html>
 </body>
 </html>"""
 
+## VULN-04: el saludo se renderiza con Jinja2 (autoescape activo), nunca concatenando HTML.
+SALUDO = """<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Saludo</title></head>
+<body><h1>Hola, {{ name }}!</h1></body></html>"""
+
 
 def conectar():
     """!
@@ -166,11 +171,11 @@ def portada():
 @app.route("/hello")
 def hello():
     """!
-    @brief Saluda al usuario cuyo nombre llega en el parámetro de URL «name».
+    @brief Saluda al usuario cuyo nombre llega en el parámetro de URL «name» (escapado).
     @return Página HTML con el saludo.
     """
-    name = request.args.get("name", "visitante")
-    return f"<h1>Hola, {name}!</h1>"
+    name = request.args.get("name", "visitante")[:100]
+    return render_template_string(SALUDO, name=name)
 
 
 @app.route("/health")
