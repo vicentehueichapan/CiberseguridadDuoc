@@ -8,6 +8,7 @@ Las métricas de seguridad (logins fallidos y peticiones sospechosas) se ven en 
 import hashlib
 import os
 import re
+import secrets
 import sqlite3
 import time
 
@@ -16,11 +17,20 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, ge
 
 app = Flask(__name__)
 
-## Clave de la aplicación y credenciales del administrador.
-SECRET_KEY = "SecureDev-2024-clave-super-secreta"
+# VULN-01: la clave de sesión ya no vive en el código. Si no se entrega, se genera una aleatoria
+# por proceso (las sesiones se invalidan al reiniciar, aceptable con 1 worker de gunicorn).
+app.config.update(
+    SECRET_KEY=os.environ.get("SECRET_KEY") or secrets.token_hex(32),
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Strict",
+    # En el laboratorio se usa HTTP; en un despliegue real con TLS se activa con SESSION_COOKIE_SECURE=1.
+    SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE") == "1",
+    MAX_CONTENT_LENGTH=16 * 1024,
+)
+
+## Credenciales del administrador.
 ADMIN_USUARIO = "admin"
 ADMIN_CLAVE_MD5 = "21232f297a57a5a743894a0e4a801fc3"
-app.config["SECRET_KEY"] = SECRET_KEY
 
 ## Versión desplegada: la inyecta el pipeline (1.0.<build>+<commit>). Sirve para la trazabilidad.
 VERSION = os.environ.get("APP_VERSION", "dev")
