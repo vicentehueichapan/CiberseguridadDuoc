@@ -6,6 +6,21 @@ pruebas, análisis estático, dependencias, OWASP ZAP, despliegue protegido, mon
 
 > Este repositorio es solo el punto de partida. Las capturas van en **Desarrollo EV3.docx** (sección con el mismo número de evidencia).
 
+## Entrega · Vicente Hueichapan
+
+| Qué | Dónde |
+|---|---|
+| Pipeline CI/CD completo (Build → Test → SAST → SCA → Staging → DAST ZAP → gate → Producción) | [`Jenkinsfile`](Jenkinsfile) |
+| Vulnerabilidades encontradas y corregidas (VULN-01…VULN-10) | commits `VULN-xx` y [`docs/REGISTRO_SEGURIDAD.md`](docs/REGISTRO_SEGURIDAD.md) secciones 1 y 2 |
+| Pruebas de regresión de seguridad | [`tests/test_seguridad.py`](tests/test_seguridad.py) |
+| Resultados de OWASP ZAP | sección 3 del registro |
+| Monitoreo e incidente en Grafana | sección 4 del registro · [`laboratorio-windows/grafana`](laboratorio-windows/grafana) |
+| Dependabot y actualización de dependencias | [`.github/dependabot.yml`](.github/dependabot.yml), PR #1–#6, sección 5 |
+| Trazabilidad build ↔ commit ↔ hallazgos ↔ despliegue | [`docs/TRAZABILIDAD.md`](docs/TRAZABILIDAD.md), sección 6 · [`docs/BITACORA.md`](docs/BITACORA.md) |
+| Laboratorio usado (Windows, sin Docker) | [`laboratorio-windows/README.md`](laboratorio-windows/README.md) · despliegue con [`scripts/deploy.ps1`](scripts/deploy.ps1) |
+
+Resultado final: build **#5 SUCCESS**, 19/19 pruebas, Bandit 0/0/0, pip-audit 0 vulnerabilidades, ZAP 0/0/0, producción `1.0.5+57b2db1`.
+
 ## Rutas
 
 | Método | Ruta | Descripción |

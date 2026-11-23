@@ -1,0 +1,10 @@
+# Fuente de datos Prometheus (red interna de Docker).
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus-ev3
+    type: prometheus
+    access: proxy
+    url: http://127.0.0.1:9090
+    isDefault: true
+    editable: false

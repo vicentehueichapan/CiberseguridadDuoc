@@ -1,0 +1,63 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: seguridad
+    folder: SecureDev
+    interval: 10s
+    rules:
+      - uid: ev3-fuerza-bruta
+        title: Fuerza bruta en produccion
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: prometheus-ev3
+            model:
+              refId: A
+              expr: sum(increase(login_fallidos_total{job="produccion"}[1m]))
+              instant: true
+          - refId: B
+            datasourceUid: __expr__
+            model: { refId: B, type: reduce, expression: A, reducer: last }
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [10] }
+        noDataState: OK
+        execErrState: Error
+        for: 10s
+        labels: { severidad: alta, categoria: fuerza_bruta }
+        annotations:
+          summary: Mas de 10 logins fallidos por minuto en produccion (posible fuerza bruta)
+      - uid: ev3-peticiones-sospechosas
+        title: Peticiones sospechosas en produccion (SQLi, XSS, traversal)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: prometheus-ev3
+            model:
+              refId: A
+              expr: sum(increase(peticiones_sospechosas_total{job="produccion",tipo!="fuerza_bruta"}[1m]))
+              instant: true
+          - refId: B
+            datasourceUid: __expr__
+            model: { refId: B, type: reduce, expression: A, reducer: last }
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        labels: { severidad: media, categoria: ataque_web }
+        annotations:
+          summary: Se detectaron parametros con patrones de ataque en produccion
