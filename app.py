@@ -4,6 +4,18 @@
 
 Además de las rutas de negocio, la app publica métricas para Prometheus en /metrics.
 Las métricas de seguridad (logins fallidos y peticiones sospechosas) se ven en Grafana.
+
+Versión corregida (ver docs/REGISTRO_SEGURIDAD.md):
+  VULN-01 secreto embebido        -> SECRET_KEY desde variable de entorno (o aleatoria por proceso)
+  VULN-02 inyección SQL           -> consulta parametrizada
+  VULN-03 divulgación de errores  -> mensaje genérico, sin SQL ni traza
+  VULN-04 XSS reflejado           -> plantilla con autoescape
+  VULN-05 MD5 + clave "admin"     -> hash scrypt/pbkdf2 de Werkzeug desde variable de entorno
+  VULN-06 fuerza bruta            -> bloqueo temporal por IP (HTTP 429)
+  VULN-07 CSRF en /login          -> token anti-CSRF en sesión
+  VULN-08 debug=True / 0.0.0.0    -> sin depurador; 127.0.0.1 al ejecutar directo
+  VULN-09 cabeceras de seguridad  -> CSP, X-Frame-Options, nosniff, etc.
+  VULN-10 inyección en logs       -> se neutralizan caracteres de control en el usuario
 """
 import hmac
 import os
@@ -34,7 +46,6 @@ app.config.update(
 # entorno, p. ej. desde una credencial de Jenkins. Sin hash configurado, el acceso admin queda deshabilitado.
 ADMIN_USUARIO = os.environ.get("ADMIN_USUARIO", "admin")
 ADMIN_CLAVE_HASH = os.environ.get("ADMIN_CLAVE_HASH", "")
-
 
 ## Versión desplegada: la inyecta el pipeline (1.0.<build>+<commit>). Sirve para la trazabilidad.
 VERSION = os.environ.get("APP_VERSION", "dev")
