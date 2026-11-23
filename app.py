@@ -145,6 +145,15 @@ def despues_de_la_peticion(respuesta):
     return respuesta
 
 
+@app.errorhandler(500)
+def error_interno(_error):
+    """!
+    @brief VULN-03: respuesta genérica ante errores; el detalle queda solo en el log del servidor.
+    @return JSON con un mensaje genérico y código 500.
+    """
+    return jsonify({"error": "Error interno"}), 500
+
+
 @app.route("/")
 def portada():
     """!
@@ -218,8 +227,10 @@ def buscar_alumnos():
         filas = conectar().execute(
             "SELECT * FROM alumnos WHERE nombre LIKE ? ESCAPE '\\' ORDER BY id", (patron,)
         ).fetchall()
-    except sqlite3.Error as error:
-        return jsonify({"error": str(error)}), 500
+    except sqlite3.Error:
+        # VULN-03: sin devolver el error ni la consulta al cliente.
+        app.logger.exception("Error de base de datos en /alumnos/buscar")
+        return jsonify({"error": "Error interno"}), 500
     return jsonify([dict(f) for f in filas])
 
 
