@@ -147,6 +147,16 @@ def iniciar_db():
     db.close()
 
 
+def para_log(valor, largo=64):
+    """!
+    @brief VULN-10: neutraliza saltos de línea y caracteres de control antes de escribir en el log.
+    @param valor Texto controlado por el usuario.
+    @param largo Largo máximo registrado.
+    @return Texto seguro para una línea de log.
+    """
+    return re.sub(r"[\x00-\x1f\x7f]", "?", valor)[:largo]
+
+
 def token_csrf():
     """!
     @brief VULN-07: devuelve (y crea si falta) el token anti-CSRF de la sesión.
@@ -332,7 +342,7 @@ def login():
 
     registrar_fallo(ip)
     LOGIN_FALLIDOS.inc()
-    app.logger.warning("Login fallido para el usuario '%s' desde %s", usuario, ip)
+    app.logger.warning("Login fallido para el usuario '%s' desde %s", para_log(usuario), ip)
     return jsonify({"error": "Credenciales inválidas"}), 401
 
 
