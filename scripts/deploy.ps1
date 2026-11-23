@@ -38,15 +38,15 @@ try {
     if ($LASTEXITCODE) { exit 1 }
 
     Write-Host ">> [$Entorno] 4/4 Iniciando la aplicacion (version $version)"
-    # JENKINS_NODE_COOKIE/BUILD_ID=dontKillMe evitan que Jenkins detenga la app al terminar el build.
-    $env:APP_VERSION = $version
-    $env:DB_PATH = Join-Path $destino 'alumnos.db'
-    $env:JENKINS_NODE_COOKIE = 'dontKillMe'
-    $env:BUILD_ID = 'dontKillMe'
-    $p = Start-Process -FilePath (Join-Path $destino '.venv\Scripts\waitress-serve.exe') `
-        -ArgumentList "--listen=127.0.0.1:$Puerto", '--threads=4', 'app:app' -WorkingDirectory $destino `
-        -WindowStyle Hidden -PassThru -RedirectStandardOutput 'app.log' -RedirectStandardError 'app.err.log'
-    Set-Content -Path $pidfile -Value $p.Id
+    # Se crea con Win32_Process.Create: el proceso queda desacoplado del build (no hereda los
+    # descriptores del paso de Jenkins ni su arbol de procesos), equivalente a setsid + nohup en Linux.
+    $db = Join-Path $destino 'alumnos.db'
+    $exe = Join-Path $destino '.venv\Scripts\waitress-serve.exe'
+    $cmd = "cmd.exe /c set `"APP_VERSION=$version`" && set `"DB_PATH=$db`" && `"$exe`" " +
+           "--listen=127.0.0.1:$Puerto --threads=4 app:app > app.log 2> app.err.log"
+    $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create `
+        -Arguments @{ CommandLine = $cmd; CurrentDirectory = $destino }
+    if ($r.ReturnValue -ne 0) { Write-Host "ERROR: no se pudo iniciar la app ($($r.ReturnValue))"; exit 1 }
 } finally { Pop-Location }
 
 Write-Host ">> [$Entorno] Prueba de humo"
@@ -56,6 +56,8 @@ for ($i = 0; $i -lt 30; $i++) {
     catch { Start-Sleep -Seconds 1 }
 }
 if (-not $ok) { Write-Host 'ERROR: /health no responde'; Get-Content (Join-Path $destino 'app.err.log') -Tail 30; exit 1 }
+$escucha = Get-NetTCPConnection -LocalPort $Puerto -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($escucha) { Set-Content -Path $pidfile -Value $escucha.OwningProcess }
 $desplegada = (Invoke-WebRequest "http://127.0.0.1:$Puerto/version" -UseBasicParsing).Content
 Write-Host "/version -> $desplegada"
 if ($desplegada -notlike "*`"$version`"*") { Write-Host "ERROR: la version desplegada no es $version"; exit 1 }
