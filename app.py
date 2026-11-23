@@ -10,6 +10,7 @@ import os
 import re
 import secrets
 import sqlite3
+import threading
 import time
 
 from flask import Flask, Response, g, jsonify, render_template_string, request
@@ -39,6 +40,12 @@ ADMIN_CLAVE_HASH = os.environ.get("ADMIN_CLAVE_HASH", "")
 VERSION = os.environ.get("APP_VERSION", "dev")
 ## Archivo SQLite con los alumnos (cada entorno usa el suyo).
 DB_PATH = os.environ.get("DB_PATH", "alumnos.db")
+
+## VULN-06: política anti fuerza bruta.
+MAX_FALLOS = int(os.environ.get("LOGIN_MAX_FALLOS", "5"))
+VENTANA_S = int(os.environ.get("LOGIN_VENTANA_S", "300"))
+_fallos_por_ip = {}
+_fallos_lock = threading.Lock()
 
 ALUMNOS_INICIALES = [
     (1, "Ana Pérez", "Ingeniería en Informática", 6.1),
@@ -124,6 +131,28 @@ def iniciar_db():
         db.executemany("INSERT INTO alumnos VALUES (?, ?, ?, ?)", ALUMNOS_INICIALES)
     db.commit()
     db.close()
+
+
+def ip_bloqueada(ip):
+    """!
+    @brief VULN-06: indica si la IP superó el máximo de fallos dentro de la ventana.
+    @param ip Dirección del cliente.
+    @return True si debe responderse 429.
+    """
+    ahora = time.monotonic()
+    with _fallos_lock:
+        recientes = [t for t in _fallos_por_ip.get(ip, []) if ahora - t < VENTANA_S]
+        _fallos_por_ip[ip] = recientes
+        return len(recientes) >= MAX_FALLOS
+
+
+def registrar_fallo(ip):
+    """!
+    @brief VULN-06: anota un intento fallido de la IP.
+    @param ip Dirección del cliente.
+    """
+    with _fallos_lock:
+        _fallos_por_ip.setdefault(ip, []).append(time.monotonic())
 
 
 @app.before_request
@@ -246,18 +275,30 @@ def buscar_alumnos():
 def login():
     """!
     @brief Valida las credenciales del administrador enviadas por formulario.
-    @return JSON con el resultado; 401 si las credenciales no son válidas.
+    @return JSON con el resultado; 401 si las credenciales no son válidas,
+            429 si la IP está bloqueada por exceso de intentos.
     """
+    ip = request.remote_addr or "desconocida"
     usuario = request.form.get("usuario", "")
     clave = request.form.get("clave", "")
+
+    # VULN-06: bloqueo temporal tras varios fallos.
+    if ip_bloqueada(ip):
+        LOGIN_FALLIDOS.inc()
+        SOSPECHOSAS.labels(tipo="fuerza_bruta").inc()
+        app.logger.warning("Login bloqueado (fuerza bruta) desde %s", ip)
+        return jsonify({"error": "Demasiados intentos. Intenta más tarde."}), 429
+
     # VULN-05: comparación en tiempo constante contra un hash lento con sal.
     usuario_ok = hmac.compare_digest(usuario, ADMIN_USUARIO)
     clave_ok = bool(ADMIN_CLAVE_HASH) and check_password_hash(ADMIN_CLAVE_HASH, clave)
     if usuario_ok and clave_ok:
         LOGIN_EXITOSOS.inc()
         return jsonify({"mensaje": "Bienvenido, administrador"})
+
+    registrar_fallo(ip)
     LOGIN_FALLIDOS.inc()
-    app.logger.warning("Login fallido para el usuario '%s' desde %s", usuario, request.remote_addr)
+    app.logger.warning("Login fallido para el usuario '%s' desde %s", usuario, ip)
     return jsonify({"error": "Credenciales inválidas"}), 401
 
 
