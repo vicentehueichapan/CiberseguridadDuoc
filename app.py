@@ -70,6 +70,19 @@ PATRONES_ATAQUE = {
     "path_traversal": re.compile(r"\.\./|\.\.\\|%2e%2e", re.I),
 }
 
+## VULN-09: cabeceras de seguridad que se agregan a todas las respuestas.
+CABECERAS_SEGURIDAD = {
+    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; "
+                               "form-action 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Resource-Policy": "same-origin",
+    "Cache-Control": "no-store",
+}
+
 PORTADA = """<!doctype html>
 <html lang="es">
 <head><meta charset="utf-8"><title>Sistema Alumnos</title></head>
@@ -182,10 +195,12 @@ def antes_de_la_peticion():
 @app.after_request
 def despues_de_la_peticion(respuesta):
     """!
-    @brief Registra la métrica de cada petición atendida.
+    @brief Registra la métrica de cada petición atendida y agrega las cabeceras de seguridad.
     @param respuesta Respuesta que Flask enviará al cliente.
     @return La misma respuesta.
     """
+    for cabecera, valor in CABECERAS_SEGURIDAD.items():
+        respuesta.headers.setdefault(cabecera, valor)
     endpoint = request.url_rule.rule if request.url_rule else "desconocido"
     if endpoint != "/metrics":
         HTTP_PETICIONES.labels(request.method, endpoint, str(respuesta.status_code)).inc()
