@@ -13,7 +13,7 @@ import sqlite3
 import threading
 import time
 
-from flask import Flask, Response, g, jsonify, render_template_string, request
+from flask import Flask, Response, g, jsonify, render_template_string, request, session
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 from werkzeug.security import check_password_hash
 
@@ -87,7 +87,8 @@ PORTADA = """<!doctype html>
 </form>
 <h2>Acceso administrador</h2>
 <form action="/login" method="post">
-  <input name="usuario" value="admin"> <input name="clave" type="password" value="">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input name="usuario" value="admin"> <input name="clave" type="password" value="" autocomplete="current-password">
   <button type="submit">Entrar</button>
 </form>
 </body>
@@ -131,6 +132,16 @@ def iniciar_db():
         db.executemany("INSERT INTO alumnos VALUES (?, ?, ?, ?)", ALUMNOS_INICIALES)
     db.commit()
     db.close()
+
+
+def token_csrf():
+    """!
+    @brief VULN-07: devuelve (y crea si falta) el token anti-CSRF de la sesión.
+    @return Token aleatorio de la sesión actual.
+    """
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_urlsafe(32)
+    return session["csrf_token"]
 
 
 def ip_bloqueada(ip):
@@ -197,7 +208,7 @@ def portada():
     @brief Portada HTML con enlaces y formularios del sistema.
     @return Página HTML.
     """
-    return render_template_string(PORTADA, version=VERSION)
+    return render_template_string(PORTADA, version=VERSION, csrf_token=token_csrf())
 
 
 @app.route("/hello")
@@ -275,12 +286,18 @@ def buscar_alumnos():
 def login():
     """!
     @brief Valida las credenciales del administrador enviadas por formulario.
-    @return JSON con el resultado; 401 si las credenciales no son válidas,
+    @return JSON con el resultado; 400 sin token CSRF válido, 401 si las credenciales no son válidas,
             429 si la IP está bloqueada por exceso de intentos.
     """
     ip = request.remote_addr or "desconocida"
     usuario = request.form.get("usuario", "")
     clave = request.form.get("clave", "")
+
+    # VULN-07: token anti-CSRF obligatorio.
+    enviado = request.form.get("csrf_token", "")
+    esperado = session.get("csrf_token", "")
+    if not esperado or not hmac.compare_digest(enviado, esperado):
+        return jsonify({"error": "Solicitud inválida"}), 400
 
     # VULN-06: bloqueo temporal tras varios fallos.
     if ip_bloqueada(ip):
@@ -294,6 +311,8 @@ def login():
     clave_ok = bool(ADMIN_CLAVE_HASH) and check_password_hash(ADMIN_CLAVE_HASH, clave)
     if usuario_ok and clave_ok:
         LOGIN_EXITOSOS.inc()
+        session.clear()
+        session["admin"] = True
         return jsonify({"mensaje": "Bienvenido, administrador"})
 
     registrar_fallo(ip)
