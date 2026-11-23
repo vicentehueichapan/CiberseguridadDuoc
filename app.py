@@ -211,12 +211,15 @@ def buscar_alumnos():
     @brief Busca alumnos cuyo nombre contenga el texto del parámetro «nombre».
     @return JSON con los alumnos encontrados.
     """
-    nombre = request.args.get("nombre", "")
-    consulta = f"SELECT * FROM alumnos WHERE nombre LIKE '%{nombre}%'"
+    nombre = request.args.get("nombre", "")[:100]
+    # VULN-02: el valor viaja como parámetro, nunca dentro del texto SQL.
+    patron = "%" + nombre.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
     try:
-        filas = conectar().execute(consulta).fetchall()
+        filas = conectar().execute(
+            "SELECT * FROM alumnos WHERE nombre LIKE ? ESCAPE '\\' ORDER BY id", (patron,)
+        ).fetchall()
     except sqlite3.Error as error:
-        return jsonify({"error": str(error), "consulta": consulta}), 500
+        return jsonify({"error": str(error)}), 500
     return jsonify([dict(f) for f in filas])
 
 
